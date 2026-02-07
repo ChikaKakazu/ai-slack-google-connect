@@ -27,8 +27,7 @@ echo "=== Lambda package created: lambda.zip ==="
 # Deploy with Terraform
 cd "${INFRA_DIR}"
 terraform init
-terraform apply -auto-approve \
-  -var="lambda_source_changed=true"
+terraform apply -auto-approve
 
 echo "=== Deployment complete ==="
 

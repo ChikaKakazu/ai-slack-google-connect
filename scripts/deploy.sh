@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${SCRIPT_DIR}/.."
 INFRA_DIR="${PROJECT_DIR}/infra/aws"
-FUNCTION_NAME="ai-slack-google-connect-dev"
+FUNCTION_NAME="ai-slack-google-connect-prod"
 
 # --- Build Lambda zip ---
 echo "=== Building Lambda deployment package ==="

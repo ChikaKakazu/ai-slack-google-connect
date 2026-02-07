@@ -18,6 +18,18 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# Initial placeholder zip for first terraform apply.
+# After first deploy, deploy.sh updates Lambda code directly.
+data "archive_file" "lambda_placeholder" {
+  type        = "zip"
+  output_path = "${path.module}/lambda_placeholder.zip"
+
+  source {
+    content  = "def handler(event, context): return {'statusCode': 200, 'body': 'placeholder'}"
+    filename = "app.py"
+  }
+}
+
 resource "aws_lambda_function" "slack_bot" {
   function_name = "${var.project_name}-${var.environment}"
   role          = aws_iam_role.lambda_role.arn
@@ -26,8 +38,8 @@ resource "aws_lambda_function" "slack_bot" {
   timeout       = var.lambda_timeout
   memory_size   = var.lambda_memory_size
 
-  filename         = "${path.module}/../../lambda.zip"
-  source_code_hash = filebase64sha256("${path.module}/../../lambda.zip")
+  filename         = data.archive_file.lambda_placeholder.output_path
+  source_code_hash = data.archive_file.lambda_placeholder.output_base64sha256
 
   environment {
     variables = {

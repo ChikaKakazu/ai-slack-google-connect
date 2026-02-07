@@ -25,7 +25,7 @@ variable "lambda_memory_size" {
 variable "lambda_timeout" {
   description = "Lambda timeout in seconds"
   type        = number
-  default     = 30
+  default     = 60
 }
 
 variable "conversation_ttl_hours" {

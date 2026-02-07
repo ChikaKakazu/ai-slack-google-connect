@@ -50,6 +50,7 @@ resource "aws_lambda_function" "slack_bot" {
       GOOGLE_SECRETS_NAME      = aws_secretsmanager_secret.google_secrets.name
       BEDROCK_MODEL_ID         = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
       BEDROCK_REGION           = var.aws_region
+      API_GATEWAY_URL          = "${aws_apigatewayv2_api.slack_bot.api_endpoint}/"
     }
   }
 

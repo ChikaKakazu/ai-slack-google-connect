@@ -16,6 +16,7 @@ class TestCleanMentionText:
     def test_empty_after_mention(self):
         assert _clean_mention_text("<@U12345>") == ""
 
-    def test_multiple_mentions(self):
+    def test_multiple_mentions_preserves_user_mentions(self):
+        # Only the first mention (bot) is removed; other user mentions are preserved
         result = _clean_mention_text("<@U12345> <@U67890> meeting")
-        assert result == "meeting"
+        assert result == "<@U67890> meeting"

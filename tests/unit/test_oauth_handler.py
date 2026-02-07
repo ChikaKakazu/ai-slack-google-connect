@@ -60,6 +60,38 @@ class TestHandleOAuthCallback:
         assert "完了" in result["body"]
         mock_token_service.save_credentials.assert_called_once_with("U123", mock_flow.credentials)
 
+    @patch("handlers.oauth_handler._execute_pending_request")
+    @patch("handlers.oauth_handler.conversation_service")
+    @patch("handlers.oauth_handler.token_service")
+    @patch("handlers.oauth_handler.get_google_secrets")
+    @patch("handlers.oauth_handler.Flow")
+    def test_successful_oauth_with_pending_request(
+        self, mock_flow_cls, mock_get_secrets, mock_token_service,
+        mock_conv_service, mock_execute_pending,
+    ):
+        mock_get_secrets.return_value = {
+            "client_id": "test-client-id",
+            "client_secret": "test-client-secret",
+        }
+        mock_flow = MagicMock()
+        mock_flow_cls.from_client_config.return_value = mock_flow
+        mock_flow.credentials = MagicMock()
+
+        pending = {"text": "今日の予定教えて", "thread_ts": "1234.5678", "channel_id": "C001"}
+        mock_conv_service.get_pending_request.return_value = pending
+
+        event = {
+            "queryStringParameters": {"code": "auth_code", "state": "U123"},
+            "headers": {"host": "api.example.com"},
+            "requestContext": {"stage": "$default"},
+        }
+
+        result = handle_oauth_callback(event)
+        assert result["statusCode"] == 200
+        assert "自動的に処理" in result["body"]
+        mock_conv_service.delete_pending_request.assert_called_once_with("U123")
+        mock_execute_pending.assert_called_once_with("U123", pending)
+
     @patch("handlers.oauth_handler.get_google_secrets")
     def test_oauth_exception_returns_500(self, mock_get_secrets):
         mock_get_secrets.side_effect = Exception("Connection error")

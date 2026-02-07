@@ -13,8 +13,10 @@ def get_tool_definitions() -> list[dict]:
         {
             "name": "search_free_slots",
             "description": (
-                "指定された参加者全員の空き時間を検索します。"
-                "Google Calendarの予定を確認し、全員が参加可能な時間帯を返します。"
+                "指定された参加者のGoogle Calendarを確認します。"
+                "予定の確認、空き時間の検索、スケジュールの確認に使用してください。"
+                "「今日の予定を教えて」「空き時間を探して」などのリクエストに対して、"
+                "このツールを必ず呼び出してください。"
             ),
             "input_schema": {
                 "type": "object",
@@ -26,7 +28,7 @@ def get_tool_definitions() -> list[dict]:
                     },
                     "date": {
                         "type": "string",
-                        "description": "検索対象の日付（例: '2024-01-15', '明日', '今日'）",
+                        "description": "検索対象の日付（例: '2024-01-15', '明日', '今日'）。省略時は今日の日付が使用されます。",
                     },
                     "time_min": {
                         "type": "string",
@@ -38,11 +40,16 @@ def get_tool_definitions() -> list[dict]:
                     },
                     "duration_minutes": {
                         "type": "integer",
-                        "description": "ミーティングの所要時間（分）。デフォルト30分",
-                        "default": 30,
+                        "description": "ミーティングの所要時間（分）。デフォルト60分",
+                        "default": 60,
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "予定のタイトル（件名）。省略時は「ミーティング」",
+                        "default": "ミーティング",
                     },
                 },
-                "required": ["attendees", "date"],
+                "required": ["attendees"],
             },
         },
         {
@@ -103,6 +110,37 @@ def get_tool_definitions() -> list[dict]:
                     },
                 },
                 "required": ["event_id", "new_start_time", "new_end_time"],
+            },
+        },
+        {
+            "name": "suggest_reschedule",
+            "description": (
+                "既存のイベントの参加者を自動取得し、空き時間候補を最大3つ提案します。"
+                "「このMTGをリスケして」「時間を変更して」などのリクエストに使用してください。"
+                "具体的な新しい時間が指定されていない場合はこのツールを使ってください。"
+                "event_titleでイベントを検索できます。event_idが分かっている場合はevent_idを使用してください。"
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "event_id": {
+                        "type": "string",
+                        "description": "リスケ対象のイベントID（event_titleと排他。IDが分かっている場合のみ使用）",
+                    },
+                    "event_title": {
+                        "type": "string",
+                        "description": "リスケ対象のイベントタイトル（部分一致で検索。例: 'MTG被りテスト'、'定例会議'）",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "リスケ候補を検索する日付（例: '2024-01-15', '明日', '今日'）。省略時は元のイベントと同じ日。",
+                    },
+                    "duration_minutes": {
+                        "type": "integer",
+                        "description": "ミーティングの所要時間（分）。省略時は元のイベントの長さを使用。",
+                    },
+                },
+                "required": [],
             },
         },
     ]

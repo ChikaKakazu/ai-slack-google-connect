@@ -100,3 +100,68 @@ class ConversationService:
             )
         except Exception:
             logger.exception("Failed to clear conversation: user=%s thread=%s", user_id, thread_ts)
+
+    def save_pending_request(
+        self, user_id: str, text: str, thread_ts: str, channel_id: str
+    ) -> None:
+        """Save a pending request to be re-executed after OAuth completion.
+
+        Uses a special thread_ts key prefix to distinguish from normal conversations.
+
+        Args:
+            user_id: Slack user ID.
+            text: Original request text.
+            thread_ts: Thread timestamp.
+            channel_id: Slack channel ID.
+        """
+        ttl = int(time.time()) + 600  # 10-minute TTL
+        try:
+            self.table.put_item(
+                Item={
+                    "user_id": user_id,
+                    "thread_ts": "pending_oauth",
+                    "messages": json.dumps({
+                        "text": text,
+                        "thread_ts": thread_ts,
+                        "channel_id": channel_id,
+                    }, ensure_ascii=False),
+                    "ttl": ttl,
+                    "updated_at": int(time.time()),
+                }
+            )
+        except Exception:
+            logger.exception("Failed to save pending request: user=%s", user_id)
+
+    def get_pending_request(self, user_id: str) -> dict | None:
+        """Get a pending request for a user after OAuth.
+
+        Args:
+            user_id: Slack user ID.
+
+        Returns:
+            Dict with text, thread_ts, channel_id or None.
+        """
+        try:
+            response = self.table.get_item(
+                Key={"user_id": user_id, "thread_ts": "pending_oauth"}
+            )
+            item = response.get("Item")
+            if item:
+                return json.loads(item.get("messages", "{}"))
+            return None
+        except Exception:
+            logger.exception("Failed to get pending request: user=%s", user_id)
+            return None
+
+    def delete_pending_request(self, user_id: str) -> None:
+        """Delete a pending request after it has been processed.
+
+        Args:
+            user_id: Slack user ID.
+        """
+        try:
+            self.table.delete_item(
+                Key={"user_id": user_id, "thread_ts": "pending_oauth"}
+            )
+        except Exception:
+            logger.exception("Failed to delete pending request: user=%s", user_id)

@@ -1,12 +1,12 @@
 """Google Calendar API operations."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-from utils.time_utils import JST, find_free_slots, parse_datetime, to_rfc3339
+from utils.time_utils import JST, find_free_slots, now_jst, parse_datetime, to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,56 @@ class CalendarService:
 
     def __init__(self, credentials: Credentials):
         self.service = build("calendar", "v3", credentials=credentials)
+
+    def get_event(self, event_id: str, calendar_id: str = "primary") -> dict:
+        """Get a calendar event by ID.
+
+        Args:
+            event_id: Google Calendar event ID.
+            calendar_id: Calendar containing the event.
+
+        Returns:
+            Event resource dict.
+        """
+        return self.service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+
+    def search_events(
+        self,
+        query: str,
+        time_min: datetime | None = None,
+        time_max: datetime | None = None,
+        max_results: int = 5,
+        calendar_id: str = "primary",
+    ) -> list[dict]:
+        """Search calendar events by title keyword.
+
+        Args:
+            query: Search keyword (matched against event title).
+            time_min: Start of search range. Defaults to start of today.
+            time_max: End of search range. Defaults to 7 days from now.
+            max_results: Maximum number of results.
+            calendar_id: Calendar to search in.
+
+        Returns:
+            List of event resource dicts.
+        """
+        now = now_jst()
+        if time_min is None:
+            time_min = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if time_max is None:
+            time_max = now + timedelta(days=7)
+
+        result = self.service.events().list(
+            calendarId=calendar_id,
+            q=query,
+            timeMin=to_rfc3339(time_min),
+            timeMax=to_rfc3339(time_max),
+            maxResults=max_results,
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+
+        return result.get("items", [])
 
     def get_freebusy(
         self,
@@ -55,7 +105,7 @@ class CalendarService:
         time_min: datetime,
         time_max: datetime,
         duration_minutes: int = 30,
-    ) -> list[dict]:
+    ) -> tuple[list[dict], list[dict]]:
         """Find free time slots across multiple calendars.
 
         Args:
@@ -65,7 +115,7 @@ class CalendarService:
             duration_minutes: Required duration in minutes.
 
         Returns:
-            List of available time slots.
+            Tuple of (free_slots, busy_periods).
         """
         busy_map = self.get_freebusy(calendar_ids, time_min, time_max)
 
@@ -78,7 +128,15 @@ class CalendarService:
                     "end": parse_datetime(period["end"]),
                 })
 
-        return find_free_slots(all_busy, time_min, time_max, duration_minutes)
+        free_slots = find_free_slots(all_busy, time_min, time_max, duration_minutes)
+
+        # Convert busy periods to RFC3339 for response
+        busy_rfc = [
+            {"start": to_rfc3339(b["start"]), "end": to_rfc3339(b["end"])}
+            for b in all_busy
+        ]
+
+        return free_slots, busy_rfc
 
     def create_event(
         self,

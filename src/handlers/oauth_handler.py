@@ -5,13 +5,16 @@ import os
 
 from google_auth_oauthlib.flow import Flow
 from slack_bolt import App
+from slack_sdk import WebClient
 
+from services.conversation_service import ConversationService
 from services.token_service import SCOPES, TokenService
-from utils.secrets_utils import get_google_secrets
+from utils.secrets_utils import get_google_secrets, get_slack_secrets
 
 logger = logging.getLogger(__name__)
 
 token_service = TokenService()
+conversation_service = ConversationService()
 
 
 def register_oauth_handlers(app: App) -> None:
@@ -78,6 +81,17 @@ def handle_oauth_callback(event: dict) -> dict:
 
         logger.info("OAuth completed for user=%s", user_id)
 
+        # Check for pending request and re-execute
+        pending = conversation_service.get_pending_request(user_id)
+        if pending:
+            conversation_service.delete_pending_request(user_id)
+            _execute_pending_request(user_id, pending)
+            return {
+                "statusCode": 200,
+                "body": "Google Calendarの認証が完了しました！リクエストを自動的に処理しています。Slackをご確認ください。",
+                "headers": {"Content-Type": "text/plain; charset=utf-8"},
+            }
+
         return {
             "statusCode": 200,
             "body": "Google Calendarの認証が完了しました！Slackに戻って操作を続けてください。",
@@ -91,6 +105,37 @@ def handle_oauth_callback(event: dict) -> dict:
             "body": "認証処理中にエラーが発生しました。再度お試しください。",
             "headers": {"Content-Type": "text/plain; charset=utf-8"},
         }
+
+
+def _execute_pending_request(user_id: str, pending: dict) -> None:
+    """Execute a pending request after OAuth completion.
+
+    Args:
+        user_id: Slack user ID.
+        pending: Dict with text, thread_ts, channel_id.
+    """
+    from handlers.message_handler import process_request
+
+    try:
+        secrets = get_slack_secrets()
+        client = WebClient(token=secrets["bot_token"])
+
+        # Notify user that the request is being re-executed
+        client.chat_postMessage(
+            channel=pending["channel_id"],
+            text="Google認証が完了しました！リクエストを処理しています...",
+            thread_ts=pending["thread_ts"],
+        )
+
+        process_request(
+            user_id=user_id,
+            text=pending["text"],
+            thread_ts=pending["thread_ts"],
+            channel_id=pending["channel_id"],
+            client=client,
+        )
+    except Exception:
+        logger.exception("Failed to execute pending request for user=%s", user_id)
 
 
 def _get_redirect_uri(event: dict) -> str:

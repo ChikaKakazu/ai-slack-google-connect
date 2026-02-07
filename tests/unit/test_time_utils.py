@@ -1,6 +1,6 @@
 """Tests for time_utils module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -8,6 +8,8 @@ from utils.time_utils import (
     JST,
     find_free_slots,
     get_date_range,
+    is_business_day,
+    next_business_day,
     parse_datetime,
     to_rfc3339,
 )
@@ -64,6 +66,52 @@ class TestGetDateRange:
             get_date_range("invalid")
 
 
+class TestIsBusinessDay:
+    def test_weekday_is_business_day(self):
+        # 2024-01-15 is Monday
+        assert is_business_day(date(2024, 1, 15)) is True
+
+    def test_saturday_is_not_business_day(self):
+        # 2024-01-13 is Saturday
+        assert is_business_day(date(2024, 1, 13)) is False
+
+    def test_sunday_is_not_business_day(self):
+        # 2024-01-14 is Sunday
+        assert is_business_day(date(2024, 1, 14)) is False
+
+    def test_new_years_day_is_not_business_day(self):
+        # 元旦 is a Japanese holiday
+        assert is_business_day(date(2024, 1, 1)) is False
+
+    def test_culture_day_is_not_business_day(self):
+        # 文化の日 (Nov 3)
+        assert is_business_day(date(2024, 11, 4)) is False  # 振替休日 (Nov 3 is Sunday in 2024)
+
+    def test_regular_wednesday(self):
+        # 2024-01-17 is Wednesday
+        assert is_business_day(date(2024, 1, 17)) is True
+
+
+class TestNextBusinessDay:
+    def test_friday_to_monday(self):
+        # 2024-01-12 is Friday -> next business day is Monday 2024-01-15
+        assert next_business_day(date(2024, 1, 12)) == date(2024, 1, 15)
+
+    def test_saturday_to_monday(self):
+        assert next_business_day(date(2024, 1, 13)) == date(2024, 1, 15)
+
+    def test_sunday_to_monday(self):
+        assert next_business_day(date(2024, 1, 14)) == date(2024, 1, 15)
+
+    def test_monday_to_tuesday(self):
+        assert next_business_day(date(2024, 1, 15)) == date(2024, 1, 16)
+
+    def test_before_holiday_skips_holiday(self):
+        # 2024-12-31 (Tue) -> Jan 1 is holiday, Jan 2 (Thu) is next business day
+        result = next_business_day(date(2024, 12, 31))
+        assert result == date(2025, 1, 2)
+
+
 class TestFindFreeSlots:
     def test_no_busy_periods_returns_full_day(self):
         start = datetime(2024, 1, 15, 0, 0, 0, tzinfo=JST)
@@ -82,7 +130,7 @@ class TestFindFreeSlots:
 
         busy = [{
             "start": datetime(2024, 1, 15, 9, 0, 0, tzinfo=JST),
-            "end": datetime(2024, 1, 15, 18, 0, 0, tzinfo=JST),
+            "end": datetime(2024, 1, 15, 20, 0, 0, tzinfo=JST),
         }]
 
         slots = find_free_slots(busy, start, end, duration_minutes=30)
@@ -117,6 +165,25 @@ class TestFindFreeSlots:
         slots = find_free_slots([], start, end, duration_minutes=60, work_start_hour=10, work_end_hour=12)
         # 10:00-11:00, 10:30-11:30, 11:00-12:00
         assert len(slots) == 3
+
+    def test_default_work_hours_until_20(self):
+        start = datetime(2024, 1, 15, 0, 0, 0, tzinfo=JST)
+        end = datetime(2024, 1, 16, 0, 0, 0, tzinfo=JST)
+
+        slots = find_free_slots([], start, end, duration_minutes=30)
+        # Last slot should end at 20:00
+        last = parse_datetime(slots[-1]["end"])
+        assert last.hour == 20
+        assert last.minute == 0
+
+    def test_no_lunch_break_hardcoded(self):
+        start = datetime(2024, 1, 15, 0, 0, 0, tzinfo=JST)
+        end = datetime(2024, 1, 16, 0, 0, 0, tzinfo=JST)
+
+        # With no busy periods, 13:00 should be available (no hardcoded lunch break)
+        slots = find_free_slots([], start, end, duration_minutes=30)
+        has_13 = any(parse_datetime(s["start"]).hour == 13 for s in slots)
+        assert has_13
 
     def test_duration_longer_than_slot(self):
         start = datetime(2024, 1, 15, 0, 0, 0, tzinfo=JST)

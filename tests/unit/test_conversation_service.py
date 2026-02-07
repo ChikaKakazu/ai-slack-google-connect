@@ -136,3 +136,74 @@ def test_clear_conversation(conversations_table):
 
         result = service.get_messages("U123", "1234.5678")
         assert result == []
+
+
+def test_save_and_get_pending_request(conversations_table):
+    with mock_aws():
+        dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
+        dynamodb.create_table(
+            TableName="test-conv5",
+            KeySchema=[
+                {"AttributeName": "user_id", "KeyType": "HASH"},
+                {"AttributeName": "thread_ts", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "user_id", "AttributeType": "S"},
+                {"AttributeName": "thread_ts", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        service = ConversationService(table_name="test-conv5")
+        service.save_pending_request("U123", "今日の予定教えて", "1234.5678", "C001")
+
+        result = service.get_pending_request("U123")
+        assert result is not None
+        assert result["text"] == "今日の予定教えて"
+        assert result["thread_ts"] == "1234.5678"
+        assert result["channel_id"] == "C001"
+
+
+def test_delete_pending_request(conversations_table):
+    with mock_aws():
+        dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
+        dynamodb.create_table(
+            TableName="test-conv6",
+            KeySchema=[
+                {"AttributeName": "user_id", "KeyType": "HASH"},
+                {"AttributeName": "thread_ts", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "user_id", "AttributeType": "S"},
+                {"AttributeName": "thread_ts", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        service = ConversationService(table_name="test-conv6")
+        service.save_pending_request("U123", "テスト", "1234.5678", "C001")
+        service.delete_pending_request("U123")
+
+        result = service.get_pending_request("U123")
+        assert result is None
+
+
+def test_get_pending_request_not_found(conversations_table):
+    with mock_aws():
+        dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
+        dynamodb.create_table(
+            TableName="test-conv7",
+            KeySchema=[
+                {"AttributeName": "user_id", "KeyType": "HASH"},
+                {"AttributeName": "thread_ts", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "user_id", "AttributeType": "S"},
+                {"AttributeName": "thread_ts", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+
+        service = ConversationService(table_name="test-conv7")
+        result = service.get_pending_request("U999")
+        assert result is None

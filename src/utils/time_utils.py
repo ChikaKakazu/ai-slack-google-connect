@@ -1,8 +1,27 @@
 """Timezone and datetime utilities."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+
+import holidays
 
 JST = timezone(timedelta(hours=9))
+
+_JP_HOLIDAYS = holidays.Japan()
+
+
+def is_business_day(d: date) -> bool:
+    """Check if a date is a business day (not weekend or Japanese holiday)."""
+    if d.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    return d not in _JP_HOLIDAYS
+
+
+def next_business_day(d: date) -> date:
+    """Return the next business day after the given date."""
+    d = d + timedelta(days=1)
+    while not is_business_day(d):
+        d = d + timedelta(days=1)
+    return d
 
 
 def now_jst() -> datetime:
@@ -80,7 +99,7 @@ def find_free_slots(
     range_end: datetime,
     duration_minutes: int = 30,
     work_start_hour: int = 9,
-    work_end_hour: int = 18,
+    work_end_hour: int = 20,
 ) -> list[dict]:
     """Find available time slots within a range, excluding busy periods.
 
@@ -90,7 +109,7 @@ def find_free_slots(
         range_end: End of search range.
         duration_minutes: Required meeting duration in minutes.
         work_start_hour: Start of work hours (default 9).
-        work_end_hour: End of work hours (default 18).
+        work_end_hour: End of work hours (default 20).
 
     Returns:
         List of {"start": str, "end": str} dicts in RFC3339 format.
@@ -107,8 +126,10 @@ def find_free_slots(
     if day_start >= day_end:
         return []
 
+    all_busy = list(busy_periods)
+
     # Sort busy periods
-    sorted_busy = sorted(busy_periods, key=lambda x: x["start"])
+    sorted_busy = sorted(all_busy, key=lambda x: x["start"] if isinstance(x["start"], datetime) else parse_datetime(x["start"]))
 
     # Find gaps
     slots = []

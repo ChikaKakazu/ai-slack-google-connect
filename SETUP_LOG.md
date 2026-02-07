@@ -105,6 +105,27 @@ terraform apply
 ./scripts/deploy.sh
 ```
 
+## 9. UX改善対応（メンション→メール解決機能追加）
+
+### 9.1 Slack App に `users:read.email` スコープ追加
+- [Slack API](https://api.slack.com/apps) → 対象アプリ選択
+- OAuth & Permissions → Bot Token Scopes に以下を追加:
+  - `users:read` （ユーザー情報取得に必要）
+  - `users:read.email` （メールアドレス取得に必要）
+- スコープ追加後、アプリをワークスペースに **再インストール** が必要
+  - OAuth & Permissions → Reinstall to Workspace
+
+### 9.2 Lambda 再デプロイ
+```bash
+./scripts/deploy.sh
+```
+
+### 9.3 動作確認
+- Slackで `@bot <@田中さん> の今日の予定教えて` → メンションがメールアドレスに自動解決される
+- 新規ユーザーがリクエスト → OAuth認証ボタン表示 → 認証完了 → 自動的にリクエストが再実行される
+- 空き時間候補に13:00-14:00（ランチタイム）が含まれないこと
+- 20:00までのスロットが表示されること
+
 ## 作業順序まとめ
 
 ```
@@ -118,4 +139,7 @@ terraform apply
 8. Lambda デプロイ (スクリプト)
 9. Slack Event Subscriptions / Interactivity URL 設定 (手動)
 10. 動作確認: Slack でボットにメンション
+11. UX改善: Slack App に users:read.email スコープ追加 + 再インストール (手動)
+12. Lambda 再デプロイ (スクリプト)
+13. 動作確認: メンション解決・OAuth自動再実行・営業時間20:00・ランチ除外
 ```

@@ -13,13 +13,10 @@ TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 uv export --no-dev --no-hashes -o "${TEMP_DIR}/requirements.txt"
-uv pip install \
-  --target "${TEMP_DIR}" \
-  --platform manylinux2014_x86_64 \
-  --python-version 3.11 \
-  --only-binary :all: \
-  -r "${TEMP_DIR}/requirements.txt" \
-  --quiet
+docker run --rm \
+  -v "${TEMP_DIR}:/out" \
+  public.ecr.aws/lambda/python:3.11 \
+  pip install -r /out/requirements.txt -t /out --quiet
 rm "${TEMP_DIR}/requirements.txt"
 
 cp -r "${PROJECT_DIR}/src/"* "${TEMP_DIR}/"

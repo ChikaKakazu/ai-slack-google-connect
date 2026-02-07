@@ -10,9 +10,9 @@ echo "=== Building Lambda deployment package ==="
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
-# Install dependencies
+# Install dependencies to target directory for Lambda packaging
 uv export --no-dev --no-hashes -o "${TEMP_DIR}/requirements.txt"
-uv run pip install -r "${TEMP_DIR}/requirements.txt" -t "${TEMP_DIR}" --quiet
+uv pip install --target "${TEMP_DIR}" -r "${TEMP_DIR}/requirements.txt" --quiet
 rm "${TEMP_DIR}/requirements.txt"
 
 # Copy source code

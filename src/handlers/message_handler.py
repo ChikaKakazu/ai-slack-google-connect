@@ -13,6 +13,7 @@ from services.token_service import TokenService
 from tools.calendar_tools import get_tool_definitions
 from tools.tool_executor import ToolExecutor
 from utils.slack_utils import (
+    build_create_confirmation_blocks,
     build_event_created_blocks,
     build_oauth_prompt_blocks,
     build_reschedule_suggestion_blocks,
@@ -168,10 +169,10 @@ def _handle_tool_use_loop(
                     logger.error("DEBUG OAuth blocks sent, pending request saved")
                     return response, True
 
-                # For create/reschedule success, respond directly to save time
-                if result_data.get("status") == "created":
-                    blocks = build_event_created_blocks(result_data)
-                    say(blocks=blocks, text="イベントを作成しました", thread_ts=thread_ts)
+                # For create suggestion, show confirmation button
+                if result_data.get("status") == "suggest_create":
+                    blocks = build_create_confirmation_blocks(result_data)
+                    say(blocks=blocks, text="イベント作成確認", thread_ts=thread_ts)
                     return response, True
 
                 if result_data.get("status") == "rescheduled":

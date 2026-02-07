@@ -108,23 +108,17 @@ class ToolExecutor:
         }, ensure_ascii=False)
 
     def _create_event(self, calendar: CalendarService, tool_input: dict) -> str:
-        """Execute create_event tool."""
-        event = calendar.create_event(
-            summary=tool_input["summary"],
-            start_time=parse_datetime(tool_input["start_time"]),
-            end_time=parse_datetime(tool_input["end_time"]),
-            attendees=tool_input["attendees"],
-            description=tool_input.get("description", ""),
-        )
+        """Execute create_event tool.
 
+        Returns suggest_create status so the user can confirm via modal.
+        """
         return json.dumps({
-            "event_id": event["id"],
-            "html_link": event.get("htmlLink", ""),
-            "summary": event["summary"],
-            "start": event["start"]["dateTime"],
-            "end": event["end"]["dateTime"],
-            "attendees": [a["email"] for a in event.get("attendees", [])],
-            "status": "created",
+            "status": "suggest_create",
+            "summary": tool_input["summary"],
+            "start_time": tool_input["start_time"],
+            "end_time": tool_input["end_time"],
+            "attendees": tool_input["attendees"],
+            "description": tool_input.get("description", ""),
         }, ensure_ascii=False)
 
     def _reschedule_event(self, calendar: CalendarService, tool_input: dict) -> str:

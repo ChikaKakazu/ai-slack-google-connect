@@ -4,6 +4,8 @@ import json
 from unittest.mock import MagicMock
 
 from utils.slack_utils import (
+    build_create_confirmation_blocks,
+    build_create_confirmation_modal,
     build_event_created_blocks,
     build_free_slots_blocks,
     build_oauth_prompt_blocks,
@@ -318,6 +320,109 @@ class TestBuildSlotConfirmationModal:
         attendees_block = modal["blocks"][2]
         assert "👥" in attendees_block["text"]["text"]
         assert "a@test.com" in attendees_block["text"]["text"]
+
+
+class TestBuildCreateConfirmationBlocks:
+    def test_basic_structure(self):
+        data = {
+            "summary": "テストMTG",
+            "start_time": "2024-01-15T14:00:00+09:00",
+            "end_time": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com"],
+        }
+        blocks = build_create_confirmation_blocks(data)
+
+        assert len(blocks) == 3
+        assert blocks[0]["type"] == "header"
+        assert "イベント作成確認" in blocks[0]["text"]["text"]
+        assert blocks[2]["type"] == "actions"
+
+    def test_button_action_data(self):
+        data = {
+            "summary": "MTG",
+            "start_time": "2024-01-15T14:00:00+09:00",
+            "end_time": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com"],
+            "description": "テスト説明",
+        }
+        blocks = build_create_confirmation_blocks(data)
+
+        button = blocks[2]["elements"][0]
+        assert button["action_id"] == "confirm_create"
+        value = json.loads(button["value"])
+        assert value["summary"] == "MTG"
+        assert value["attendees"] == ["a@test.com"]
+        assert value["description"] == "テスト説明"
+
+    def test_time_and_attendees_display(self):
+        data = {
+            "summary": "MTG",
+            "start_time": "2024-01-15T14:00:00+09:00",
+            "end_time": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com", "b@test.com"],
+        }
+        blocks = build_create_confirmation_blocks(data)
+
+        section = blocks[1]
+        assert "01/15 14:00 - 14:30" in section["text"]["text"]
+        assert "a@test.com" in section["text"]["text"]
+
+
+class TestBuildCreateConfirmationModal:
+    def test_basic_structure(self):
+        data = {
+            "summary": "テストMTG",
+            "start_time": "2024-01-15T14:00:00+09:00",
+            "end_time": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com"],
+        }
+        modal = build_create_confirmation_modal(data, "C123", "1234.5678")
+
+        assert modal["type"] == "modal"
+        assert modal["callback_id"] == "create_confirmation_modal"
+        assert modal["submit"]["text"] == "予約する"
+        assert len(modal["blocks"]) == 3
+
+    def test_initial_value_has_summary(self):
+        data = {
+            "summary": "企画会議",
+            "start_time": "2024-01-15T14:00:00+09:00",
+            "end_time": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com"],
+        }
+        modal = build_create_confirmation_modal(data, "C123", "1234.5678")
+
+        input_block = modal["blocks"][0]
+        assert input_block["element"]["initial_value"] == "企画会議"
+
+    def test_private_metadata(self):
+        data = {
+            "summary": "MTG",
+            "start_time": "2024-01-15T14:00:00+09:00",
+            "end_time": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com"],
+            "description": "テスト",
+        }
+        modal = build_create_confirmation_modal(data, "C999", "9999.1234")
+
+        metadata = json.loads(modal["private_metadata"])
+        assert metadata["channel_id"] == "C999"
+        assert metadata["message_ts"] == "9999.1234"
+        assert metadata["start_time"] == "2024-01-15T14:00:00+09:00"
+        assert metadata["attendees"] == ["a@test.com"]
+        assert metadata["description"] == "テスト"
+
+    def test_time_and_attendees_display(self):
+        data = {
+            "summary": "MTG",
+            "start_time": "2024-01-15T14:00:00+09:00",
+            "end_time": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com"],
+        }
+        modal = build_create_confirmation_modal(data, "C123", "1234.5678")
+
+        assert "📅" in modal["blocks"][1]["text"]["text"]
+        assert "👥" in modal["blocks"][2]["text"]["text"]
 
 
 class TestResolveUserMentions:

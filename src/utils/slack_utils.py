@@ -417,6 +417,136 @@ def build_slot_confirmation_modal(
     }
 
 
+def build_create_confirmation_blocks(result_data: dict) -> list[dict]:
+    """Build Block Kit blocks for AI-created event confirmation with a button.
+
+    Args:
+        result_data: Result data from create_event tool (with status: suggest_create).
+
+    Returns:
+        List of Slack Block Kit blocks.
+    """
+    summary = result_data.get("summary", "ミーティング")
+    start_dt = parse_datetime(result_data["start_time"])
+    end_dt = parse_datetime(result_data["end_time"])
+    time_str = f"{start_dt.strftime('%m/%d %H:%M')} - {end_dt.strftime('%H:%M')}"
+    attendees = result_data.get("attendees", [])
+
+    action_value = json.dumps({
+        "action": "confirm_create",
+        "summary": summary,
+        "start_time": result_data["start_time"],
+        "end_time": result_data["end_time"],
+        "attendees": attendees,
+        "description": result_data.get("description", ""),
+    }, ensure_ascii=False)
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"📅 {summary} - イベント作成確認",
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"*時間:* {time_str}\n"
+                    f"*参加者:* {', '.join(attendees)}"
+                ),
+            },
+        },
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "予約する",
+                    },
+                    "action_id": "confirm_create",
+                    "value": action_value,
+                    "style": "primary",
+                },
+            ],
+        },
+    ]
+
+    return blocks
+
+
+def build_create_confirmation_modal(
+    create_data: dict, channel_id: str, message_ts: str
+) -> dict:
+    """Build a modal view for create event confirmation with event name input.
+
+    Args:
+        create_data: Create data containing summary, start_time, end_time, attendees, description.
+        channel_id: Slack channel ID for updating the original message.
+        message_ts: Timestamp of the original message.
+
+    Returns:
+        Slack modal view definition dict.
+    """
+    start_dt = parse_datetime(create_data["start_time"])
+    end_dt = parse_datetime(create_data["end_time"])
+    time_str = f"{start_dt.strftime('%m/%d %H:%M')} - {end_dt.strftime('%H:%M')}"
+    attendees = create_data.get("attendees", [])
+    summary = create_data.get("summary", "ミーティング")
+
+    private_metadata = json.dumps({
+        "start_time": create_data["start_time"],
+        "end_time": create_data["end_time"],
+        "attendees": attendees,
+        "description": create_data.get("description", ""),
+        "channel_id": channel_id,
+        "message_ts": message_ts,
+    }, ensure_ascii=False)
+
+    return {
+        "type": "modal",
+        "callback_id": "create_confirmation_modal",
+        "title": {"type": "plain_text", "text": "予約確認"},
+        "submit": {"type": "plain_text", "text": "予約する"},
+        "close": {"type": "plain_text", "text": "キャンセル"},
+        "private_metadata": private_metadata,
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": "summary_block",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "summary_input",
+                    "initial_value": summary,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "イベント名を入力",
+                    },
+                },
+                "label": {"type": "plain_text", "text": "イベント名"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"📅 {time_str}",
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"👥 {', '.join(attendees)}",
+                },
+            },
+        ],
+    }
+
+
 def resolve_user_mentions(text: str, client) -> str:
     """Replace Slack user mentions (<@USER_ID>) with their email addresses.
 

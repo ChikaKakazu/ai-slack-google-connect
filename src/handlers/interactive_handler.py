@@ -7,7 +7,11 @@ from slack_bolt import App
 
 from services.calendar_service import CalendarService
 from services.token_service import TokenService
-from utils.slack_utils import build_event_created_blocks, build_slot_confirmation_modal
+from utils.slack_utils import (
+    build_create_confirmation_modal,
+    build_event_created_blocks,
+    build_slot_confirmation_modal,
+)
 from utils.time_utils import parse_datetime
 
 logger = logging.getLogger(__name__)
@@ -29,9 +33,11 @@ def register_interactive_handlers(app: App) -> None:
         app.action(action_id)(_handle_confirm_reschedule)
 
     app.action("google_oauth")(_handle_oauth_button)
+    app.action("confirm_create")(_handle_confirm_create)
 
-    # Register modal submission handler
+    # Register modal submission handlers
     app.view("slot_confirmation_modal")(_handle_slot_modal_submit)
+    app.view("create_confirmation_modal")(_handle_create_modal_submit)
 
 
 def _handle_confirm_slot(ack, body, client, say) -> None:
@@ -205,6 +211,113 @@ def _handle_confirm_reschedule(ack, body, client, say) -> None:
     except Exception:
         logger.exception("Failed to reschedule event from confirmation")
         say(text="リスケジュール中にエラーが発生しました。再度お試しください。", channel=channel)
+
+
+def _handle_confirm_create(ack, body, client, say) -> None:
+    """Handle create event confirmation button click.
+
+    Opens a modal for the user to confirm/edit the event name before creating.
+    """
+    ack()
+
+    channel = body["channel"]["id"]
+    action = body["actions"][0]
+
+    try:
+        create_data = json.loads(action["value"])
+    except (json.JSONDecodeError, KeyError):
+        logger.error("Invalid create data in action value")
+        say(text="エラー: 無効なデータです。", channel=channel)
+        return
+
+    trigger_id = body.get("trigger_id")
+    if not trigger_id:
+        logger.error("No trigger_id in body")
+        say(text="エラー: モーダルを開けませんでした。", channel=channel)
+        return
+
+    message_ts = body["message"]["ts"]
+    modal = build_create_confirmation_modal(create_data, channel, message_ts)
+
+    try:
+        client.views_open(trigger_id=trigger_id, view=modal)
+    except Exception:
+        logger.exception("Failed to open create confirmation modal")
+        say(text="モーダルを開けませんでした。再度お試しください。", channel=channel)
+
+
+def _handle_create_modal_submit(ack, body, client, view) -> None:
+    """Handle create event confirmation modal submission.
+
+    Creates the calendar event with the user-specified event name.
+    """
+    ack()
+
+    user_id = body["user"]["id"]
+
+    try:
+        metadata = json.loads(view["private_metadata"])
+    except (json.JSONDecodeError, KeyError):
+        logger.error("Invalid private_metadata in create modal submission")
+        return
+
+    channel_id = metadata["channel_id"]
+    message_ts = metadata["message_ts"]
+    summary = view["state"]["values"]["summary_block"]["summary_input"]["value"]
+
+    credentials = token_service.get_credentials(user_id)
+    if not credentials:
+        try:
+            client.chat_postMessage(
+                channel=channel_id,
+                text="Google Calendarの認証が期限切れです。再度認証してください。",
+            )
+        except Exception:
+            logger.exception("Failed to send auth error message")
+        return
+
+    calendar = CalendarService(credentials)
+
+    try:
+        start_time = parse_datetime(metadata["start_time"])
+        end_time = parse_datetime(metadata["end_time"])
+        attendees = metadata["attendees"]
+        description = metadata.get("description", "")
+
+        event = calendar.create_event(
+            summary=summary,
+            start_time=start_time,
+            end_time=end_time,
+            attendees=attendees,
+            description=description,
+        )
+
+        event_data = {
+            "summary": event["summary"],
+            "start": event["start"]["dateTime"],
+            "end": event["end"]["dateTime"],
+            "attendees": [a["email"] for a in event.get("attendees", [])],
+            "html_link": event.get("htmlLink", ""),
+        }
+
+        blocks = build_event_created_blocks(event_data)
+
+        client.chat_update(
+            channel=channel_id,
+            ts=message_ts,
+            blocks=blocks,
+            text=f"✅ {summary} を作成しました",
+        )
+
+    except Exception:
+        logger.exception("Failed to create event from create modal submission")
+        try:
+            client.chat_postMessage(
+                channel=channel_id,
+                text="イベントの作成中にエラーが発生しました。再度お試しください。",
+            )
+        except Exception:
+            logger.exception("Failed to send error message")
 
 
 def _handle_oauth_button(ack, body) -> None:

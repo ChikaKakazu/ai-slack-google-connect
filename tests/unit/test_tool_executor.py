@@ -69,18 +69,10 @@ class TestToolExecutor:
 
     @patch("tools.tool_executor.token_service")
     @patch("tools.tool_executor.CalendarService")
-    def test_create_event(self, mock_cal_cls, mock_token_service, executor):
+    def test_create_event_returns_suggest_create(self, mock_cal_cls, mock_token_service, executor):
         mock_token_service.get_credentials.return_value = MagicMock()
         mock_cal = MagicMock()
         mock_cal_cls.return_value = mock_cal
-        mock_cal.create_event.return_value = {
-            "id": "event123",
-            "htmlLink": "https://calendar.google.com/event/123",
-            "summary": "テストMTG",
-            "start": {"dateTime": "2024-01-15T14:00:00+09:00"},
-            "end": {"dateTime": "2024-01-15T14:30:00+09:00"},
-            "attendees": [{"email": "a@test.com"}],
-        }
 
         result = executor.execute(
             "create_event",
@@ -94,8 +86,11 @@ class TestToolExecutor:
         )
         data = json.loads(result)
 
-        assert data["status"] == "created"
-        assert data["event_id"] == "event123"
+        assert data["status"] == "suggest_create"
+        assert data["summary"] == "テストMTG"
+        assert data["attendees"] == ["a@test.com"]
+        # Should NOT call create_event directly
+        mock_cal.create_event.assert_not_called()
 
     @patch("tools.tool_executor.token_service")
     @patch("tools.tool_executor.CalendarService")

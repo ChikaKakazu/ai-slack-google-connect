@@ -10,11 +10,13 @@ FUNCTION_NAME="ai-slack-google-connect-dev"
 echo "=== Building Lambda deployment package ==="
 
 TEMP_DIR=$(mktemp -d)
-trap 'rm -rf "${TEMP_DIR}"' EXIT
+cleanup() { docker run --rm -v "${TEMP_DIR}:/out" alpine rm -rf /out/* 2>/dev/null; rm -rf "${TEMP_DIR}"; }
+trap cleanup EXIT
 
 uv export --no-dev --no-hashes -o "${TEMP_DIR}/requirements.txt"
 docker run --rm \
   --entrypoint pip \
+  -u "$(id -u):$(id -g)" \
   -v "${TEMP_DIR}:/out" \
   public.ecr.aws/lambda/python:3.11 \
   install -r /out/requirements.txt -t /out --quiet
@@ -29,7 +31,6 @@ echo "=== Lambda package created: lambda.zip ==="
 
 # --- Deploy ---
 if [ "${1:-}" = "--infra" ]; then
-  # Full deploy: Terraform + Lambda code update
   cd "${INFRA_DIR}"
   terraform init
   terraform apply -auto-approve

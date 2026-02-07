@@ -36,12 +36,12 @@ Lambda (Python 3.11 / Slack Bolt)
 - Terraform >= 1.5
 - AWS CLI (設定済み)
 - GCP プロジェクト (Calendar API用)
+- GCP CLI (`gcloud`) 設定済み
 
 ### 1. 依存関係インストール
 
 ```bash
-uv sync
-uv pip install -e ".[dev]"
+uv sync --dev
 ```
 
 ### 2. Terraform backend構築
@@ -50,7 +50,25 @@ uv pip install -e ".[dev]"
 ./scripts/setup_backend.sh
 ```
 
-### 3. Secrets設定
+### 3. GCPセットアップ
+
+Calendar APIの有効化はTerraformで管理しています:
+
+```bash
+cd infra/gcp
+terraform init
+terraform apply -var="gcp_project_id=YOUR_PROJECT_ID"
+```
+
+OAuth Client IDはGCP Consoleで手動作成が必要です:
+
+1. [GCP Console](https://console.cloud.google.com/apis/credentials) → 認証情報
+2. 「認証情報を作成」→「OAuthクライアントID」
+3. アプリケーションの種類: 「ウェブアプリケーション」
+4. 承認済みリダイレクトURIに `https://<API_GATEWAY_URL>/oauth/google/callback` を追加
+5. 作成された `client_id` と `client_secret` を次のステップでSecrets Managerに設定
+
+### 4. Secrets設定
 
 AWS Secrets Managerに以下のシークレットを設定:
 
@@ -70,7 +88,7 @@ AWS Secrets Managerに以下のシークレットを設定:
 }
 ```
 
-### 4. インフラデプロイ
+### 5. AWSインフラデプロイ
 
 ```bash
 cd infra/aws
@@ -78,13 +96,13 @@ terraform init
 terraform apply
 ```
 
-### 5. Lambdaデプロイ
+### 6. Lambdaデプロイ
 
 ```bash
 ./scripts/deploy.sh
 ```
 
-### 6. Slack App設定
+### 7. Slack App設定
 
 1. [Slack API](https://api.slack.com/apps) でBotアプリを作成
 2. Event Subscriptionsで `app_mention` を有効化

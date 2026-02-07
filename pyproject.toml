@@ -1,0 +1,34 @@
+[project]
+name = "ai-slack-google-connect"
+version = "0.1.0"
+description = "Slack Bot + AWS Bedrock + Google Calendar integration for AI-powered meeting scheduling"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "slack-bolt>=1.18.0",
+    "boto3>=1.34.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.23.0",
+    "google-auth-oauthlib>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "moto[dynamodb,secretsmanager,s3]>=4.2.0",
+    "ruff>=0.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v --cov=src --cov-report=term-missing"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]

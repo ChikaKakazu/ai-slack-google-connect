@@ -14,9 +14,10 @@ trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 uv export --no-dev --no-hashes -o "${TEMP_DIR}/requirements.txt"
 docker run --rm \
+  --entrypoint pip \
   -v "${TEMP_DIR}:/out" \
   public.ecr.aws/lambda/python:3.11 \
-  pip install -r /out/requirements.txt -t /out --quiet
+  install -r /out/requirements.txt -t /out --quiet
 rm "${TEMP_DIR}/requirements.txt"
 
 cp -r "${PROJECT_DIR}/src/"* "${TEMP_DIR}/"

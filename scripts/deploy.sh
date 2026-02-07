@@ -11,7 +11,9 @@ TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 # Install dependencies
-pip install -r "${PROJECT_DIR}/requirements.txt" -t "${TEMP_DIR}" --quiet
+uv export --no-dev --no-hashes -o "${TEMP_DIR}/requirements.txt"
+uv run pip install -r "${TEMP_DIR}/requirements.txt" -t "${TEMP_DIR}" --quiet
+rm "${TEMP_DIR}/requirements.txt"
 
 # Copy source code
 cp -r "${PROJECT_DIR}/src/"* "${TEMP_DIR}/"

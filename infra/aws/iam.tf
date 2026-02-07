@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 data "aws_iam_policy_document" "lambda_policy" {
   # DynamoDB access
   statement {
@@ -31,8 +33,18 @@ data "aws_iam_policy_document" "lambda_policy" {
       "bedrock:InvokeModel",
     ]
     resources = [
-      "arn:aws:bedrock:${var.aws_region}::foundation-model/anthropic.*",
+      "arn:aws:bedrock:*::foundation-model/anthropic.*",
+      "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:inference-profile/apac.anthropic.*",
     ]
+  }
+
+  # AWS Marketplace access (required for Bedrock model auto-subscription)
+  statement {
+    actions = [
+      "aws-marketplace:ViewSubscriptions",
+      "aws-marketplace:Subscribe",
+    ]
+    resources = ["*"]
   }
 }
 

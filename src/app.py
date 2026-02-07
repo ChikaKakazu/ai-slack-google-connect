@@ -64,6 +64,12 @@ def handler(event: dict, context) -> dict:
     if raw_path.endswith("/oauth/google/callback"):
         return handle_oauth_callback(event)
 
+    # Ignore Slack retries to prevent duplicate processing
+    headers = event.get("headers", {})
+    if headers.get("x-slack-retry-num"):
+        logger.info("Ignoring Slack retry: retry_num=%s", headers["x-slack-retry-num"])
+        return {"statusCode": 200, "body": "ok"}
+
     # All other routes go through Slack Bolt
     slack_handler = _get_handler()
     return slack_handler.handle(event, context)

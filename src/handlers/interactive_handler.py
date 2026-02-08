@@ -11,6 +11,7 @@ from utils.slack_utils import (
     build_create_confirmation_modal,
     build_event_created_blocks,
     build_slot_confirmation_modal,
+    format_attendees_with_mentions,
 )
 from utils.time_utils import parse_datetime
 
@@ -125,7 +126,7 @@ def _handle_slot_modal_submit(ack, body, client, view) -> None:
             "html_link": event.get("htmlLink", ""),
         }
 
-        blocks = build_event_created_blocks(event_data)
+        blocks = build_event_created_blocks(event_data, client)
 
         client.chat_update(
             channel=channel_id,
@@ -185,6 +186,9 @@ def _handle_confirm_reschedule(ack, body, client, say) -> None:
         start_str = parse_datetime(updated["start"]["dateTime"]).strftime("%m/%d %H:%M")
         end_str = parse_datetime(updated["end"]["dateTime"]).strftime("%H:%M")
 
+        attendees = [a["email"] for a in updated.get("attendees", [])]
+        attendee_str = format_attendees_with_mentions(attendees, client)
+
         client.chat_update(
             channel=channel,
             ts=body["message"]["ts"],
@@ -200,6 +204,7 @@ def _handle_confirm_reschedule(ack, body, client, say) -> None:
                         "text": (
                             f"*{summary}*\n"
                             f"📅 {start_str} - {end_str}\n"
+                            f"👥 {attendee_str}\n"
                             f"<{updated.get('htmlLink', '')}|Google Calendarで確認>"
                         ),
                     },
@@ -300,7 +305,7 @@ def _handle_create_modal_submit(ack, body, client, view) -> None:
             "html_link": event.get("htmlLink", ""),
         }
 
-        blocks = build_event_created_blocks(event_data)
+        blocks = build_event_created_blocks(event_data, client)
 
         client.chat_update(
             channel=channel_id,

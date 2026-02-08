@@ -230,12 +230,14 @@ class TestHandleConfirmReschedule:
             "summary": "MTG",
             "start": {"dateTime": "2024-01-15T10:00:00+09:00"},
             "end": {"dateTime": "2024-01-15T11:00:00+09:00"},
+            "attendees": [{"email": "a@test.com"}],
             "htmlLink": "https://calendar.google.com/event/123",
         }
 
         ack = MagicMock()
         say = MagicMock()
         client = MagicMock()
+        client.users_lookupByEmail.return_value = {"user": {"id": "U999"}}
         body = {
             "user": {"id": "U123"},
             "channel": {"id": "C123"},
@@ -252,6 +254,10 @@ class TestHandleConfirmReschedule:
         _handle_confirm_reschedule(ack, body, client, say)
         ack.assert_called_once()
         client.chat_update.assert_called_once()
+        # Verify mention is in the updated message
+        blocks = client.chat_update.call_args[1]["blocks"]
+        section_text = blocks[1]["text"]["text"]
+        assert "<@U999>" in section_text
 
     def test_invalid_action_value(self):
         from handlers.interactive_handler import _handle_confirm_reschedule

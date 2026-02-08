@@ -135,6 +135,7 @@ class ToolExecutor:
             "summary": updated["summary"],
             "start": updated["start"]["dateTime"],
             "end": updated["end"]["dateTime"],
+            "attendees": [a["email"] for a in updated.get("attendees", [])],
             "status": "rescheduled",
         }, ensure_ascii=False)
 

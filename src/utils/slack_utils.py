@@ -273,11 +273,12 @@ def build_reschedule_suggestion_blocks(result_data: dict) -> list[dict]:
     return blocks
 
 
-def build_event_created_blocks(event_data: dict) -> list[dict]:
+def build_event_created_blocks(event_data: dict, client=None) -> list[dict]:
     """Build Block Kit blocks for event creation confirmation.
 
     Args:
         event_data: Event data from calendar API.
+        client: Slack WebClient instance for resolving email to mentions.
 
     Returns:
         List of Slack Block Kit blocks.
@@ -285,6 +286,12 @@ def build_event_created_blocks(event_data: dict) -> list[dict]:
     start_dt = parse_datetime(event_data["start"])
     end_dt = parse_datetime(event_data["end"])
     time_str = f"{start_dt.strftime('%Y/%m/%d %H:%M')} - {end_dt.strftime('%H:%M')}"
+
+    attendees = event_data.get("attendees", [])
+    if client and attendees:
+        attendee_str = format_attendees_with_mentions(attendees, client)
+    else:
+        attendee_str = ", ".join(attendees)
 
     blocks = [
         {
@@ -301,7 +308,7 @@ def build_event_created_blocks(event_data: dict) -> list[dict]:
                 "text": (
                     f"*{event_data['summary']}*\n"
                     f"📅 {time_str}\n"
-                    f"👥 {', '.join(event_data.get('attendees', []))}"
+                    f"👥 {attendee_str}"
                 ),
             },
         },
@@ -545,6 +552,47 @@ def build_create_confirmation_modal(
             },
         ],
     }
+
+
+def email_to_slack_user_id(email: str, client) -> str | None:
+    """Convert an email address to a Slack User ID.
+
+    Args:
+        email: Email address to look up.
+        client: Slack WebClient instance.
+
+    Returns:
+        Slack User ID (e.g., "U12345678") or None if not found.
+    """
+    try:
+        response = client.users_lookupByEmail(email=email)
+        return response["user"]["id"]
+    except Exception:
+        logger.warning("Failed to lookup Slack user for email=%s", email)
+        return None
+
+
+def format_attendees_with_mentions(attendees: list[str], client) -> str:
+    """Convert a list of email addresses to a Slack mention string.
+
+    Args:
+        attendees: List of email addresses.
+        client: Slack WebClient instance.
+
+    Returns:
+        Comma-separated string with Slack mentions where possible.
+    """
+    if not attendees:
+        return ""
+
+    mentions = []
+    for email in attendees:
+        user_id = email_to_slack_user_id(email, client)
+        if user_id:
+            mentions.append(f"<@{user_id}>")
+        else:
+            mentions.append(email)
+    return ", ".join(mentions)
 
 
 def resolve_user_mentions(text: str, client) -> str:

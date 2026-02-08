@@ -12,6 +12,8 @@ from utils.slack_utils import (
     build_reschedule_suggestion_blocks,
     build_schedule_suggestion_blocks,
     build_slot_confirmation_modal,
+    email_to_slack_user_id,
+    format_attendees_with_mentions,
     resolve_user_mentions,
 )
 
@@ -245,6 +247,99 @@ class TestBuildEventCreatedBlocks:
         }
         blocks = build_event_created_blocks(event_data)
         assert len(blocks) == 2
+
+
+class TestBuildEventCreatedBlocksWithMentions:
+    def test_with_client_resolves_mentions(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            {"user": {"id": "U222"}},
+        ]
+        event_data = {
+            "summary": "テストMTG",
+            "start": "2024-01-15T14:00:00+09:00",
+            "end": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com", "b@test.com"],
+            "html_link": "https://calendar.google.com/event/123",
+        }
+        blocks = build_event_created_blocks(event_data, client)
+
+        section_text = blocks[1]["text"]["text"]
+        assert "<@U111>" in section_text
+        assert "<@U222>" in section_text
+
+    def test_without_client_shows_emails(self):
+        event_data = {
+            "summary": "テストMTG",
+            "start": "2024-01-15T14:00:00+09:00",
+            "end": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com", "b@test.com"],
+        }
+        blocks = build_event_created_blocks(event_data)
+
+        section_text = blocks[1]["text"]["text"]
+        assert "a@test.com" in section_text
+        assert "b@test.com" in section_text
+
+    def test_partial_resolution_fallback(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            Exception("User not found"),
+        ]
+        event_data = {
+            "summary": "テストMTG",
+            "start": "2024-01-15T14:00:00+09:00",
+            "end": "2024-01-15T14:30:00+09:00",
+            "attendees": ["a@test.com", "external@other.com"],
+        }
+        blocks = build_event_created_blocks(event_data, client)
+
+        section_text = blocks[1]["text"]["text"]
+        assert "<@U111>" in section_text
+        assert "external@other.com" in section_text
+
+
+class TestEmailToSlackUserId:
+    def test_successful_lookup(self):
+        client = MagicMock()
+        client.users_lookupByEmail.return_value = {"user": {"id": "U12345"}}
+        result = email_to_slack_user_id("test@example.com", client)
+        assert result == "U12345"
+        client.users_lookupByEmail.assert_called_once_with(email="test@example.com")
+
+    def test_api_error_returns_none(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = Exception("users_not_found")
+        result = email_to_slack_user_id("unknown@example.com", client)
+        assert result is None
+
+
+class TestFormatAttendeesWithMentions:
+    def test_all_resolved(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            {"user": {"id": "U222"}},
+        ]
+        result = format_attendees_with_mentions(["a@test.com", "b@test.com"], client)
+        assert result == "<@U111>, <@U222>"
+
+    def test_partial_resolution(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            Exception("not found"),
+        ]
+        result = format_attendees_with_mentions(["a@test.com", "ext@other.com"], client)
+        assert result == "<@U111>, ext@other.com"
+
+    def test_empty_list(self):
+        client = MagicMock()
+        result = format_attendees_with_mentions([], client)
+        assert result == ""
+        client.users_lookupByEmail.assert_not_called()
 
 
 class TestBuildOAuthPromptBlocks:

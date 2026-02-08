@@ -12,6 +12,9 @@ from utils.slack_utils import (
     build_reschedule_suggestion_blocks,
     build_schedule_suggestion_blocks,
     build_slot_confirmation_modal,
+    email_to_slack_user_id,
+    format_attendees_with_mentions,
+    post_attendee_mentions,
     resolve_user_mentions,
 )
 
@@ -245,6 +248,89 @@ class TestBuildEventCreatedBlocks:
         }
         blocks = build_event_created_blocks(event_data)
         assert len(blocks) == 2
+
+
+class TestPostAttendeeMentions:
+    def test_posts_mention_message(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            {"user": {"id": "U222"}},
+        ]
+        post_attendee_mentions(client, "C123", "1234.5678", "テストMTG", ["a@test.com", "b@test.com"])
+
+        client.chat_postMessage.assert_called_once()
+        call_kwargs = client.chat_postMessage.call_args[1]
+        assert call_kwargs["channel"] == "C123"
+        assert call_kwargs["thread_ts"] == "1234.5678"
+        assert "<@U111>" in call_kwargs["text"]
+        assert "<@U222>" in call_kwargs["text"]
+        assert "テストMTG" in call_kwargs["text"]
+
+    def test_empty_attendees_does_not_post(self):
+        client = MagicMock()
+        post_attendee_mentions(client, "C123", "1234.5678", "MTG", [])
+        client.chat_postMessage.assert_not_called()
+
+    def test_partial_resolution_includes_email_fallback(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            Exception("User not found"),
+        ]
+        post_attendee_mentions(client, "C123", "1234.5678", "MTG", ["a@test.com", "ext@other.com"])
+
+        call_kwargs = client.chat_postMessage.call_args[1]
+        assert "<@U111>" in call_kwargs["text"]
+        assert "ext@other.com" in call_kwargs["text"]
+
+    def test_api_error_does_not_raise(self):
+        client = MagicMock()
+        client.users_lookupByEmail.return_value = {"user": {"id": "U111"}}
+        client.chat_postMessage.side_effect = Exception("Slack API error")
+        # Should not raise
+        post_attendee_mentions(client, "C123", "1234.5678", "MTG", ["a@test.com"])
+
+
+class TestEmailToSlackUserId:
+    def test_successful_lookup(self):
+        client = MagicMock()
+        client.users_lookupByEmail.return_value = {"user": {"id": "U12345"}}
+        result = email_to_slack_user_id("test@example.com", client)
+        assert result == "U12345"
+        client.users_lookupByEmail.assert_called_once_with(email="test@example.com")
+
+    def test_api_error_returns_none(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = Exception("users_not_found")
+        result = email_to_slack_user_id("unknown@example.com", client)
+        assert result is None
+
+
+class TestFormatAttendeesWithMentions:
+    def test_all_resolved(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            {"user": {"id": "U222"}},
+        ]
+        result = format_attendees_with_mentions(["a@test.com", "b@test.com"], client)
+        assert result == "<@U111>, <@U222>"
+
+    def test_partial_resolution(self):
+        client = MagicMock()
+        client.users_lookupByEmail.side_effect = [
+            {"user": {"id": "U111"}},
+            Exception("not found"),
+        ]
+        result = format_attendees_with_mentions(["a@test.com", "ext@other.com"], client)
+        assert result == "<@U111>, ext@other.com"
+
+    def test_empty_list(self):
+        client = MagicMock()
+        result = format_attendees_with_mentions([], client)
+        assert result == ""
+        client.users_lookupByEmail.assert_not_called()
 
 
 class TestBuildOAuthPromptBlocks:

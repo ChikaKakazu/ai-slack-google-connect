@@ -547,6 +547,79 @@ def build_create_confirmation_modal(
     }
 
 
+def email_to_slack_user_id(email: str, client) -> str | None:
+    """Convert an email address to a Slack User ID.
+
+    Args:
+        email: Email address to look up.
+        client: Slack WebClient instance.
+
+    Returns:
+        Slack User ID (e.g., "U12345678") or None if not found.
+    """
+    try:
+        response = client.users_lookupByEmail(email=email)
+        return response["user"]["id"]
+    except Exception:
+        logger.warning("Failed to lookup Slack user for email=%s", email)
+        return None
+
+
+def format_attendees_with_mentions(attendees: list[str], client) -> str:
+    """Convert a list of email addresses to a Slack mention string.
+
+    Args:
+        attendees: List of email addresses.
+        client: Slack WebClient instance.
+
+    Returns:
+        Comma-separated string with Slack mentions where possible.
+    """
+    if not attendees:
+        return ""
+
+    mentions = []
+    for email in attendees:
+        user_id = email_to_slack_user_id(email, client)
+        if user_id:
+            mentions.append(f"<@{user_id}>")
+        else:
+            mentions.append(email)
+    return ", ".join(mentions)
+
+
+def post_attendee_mentions(
+    client, channel: str, thread_ts: str, summary: str, attendees: list[str]
+) -> None:
+    """Post a new message mentioning event attendees in a thread.
+
+    Slack does not send notifications for mentions added via chat_update,
+    so this sends a new message to ensure participants are notified.
+
+    Args:
+        client: Slack WebClient instance.
+        channel: Channel ID.
+        thread_ts: Thread timestamp to reply to.
+        summary: Event summary/title.
+        attendees: List of attendee email addresses.
+    """
+    if not attendees:
+        return
+
+    mention_str = format_attendees_with_mentions(attendees, client)
+    if not mention_str:
+        return
+
+    try:
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=f"📢 {summary} に {mention_str} を招待しました",
+        )
+    except Exception:
+        logger.exception("Failed to post attendee mention message")
+
+
 def resolve_user_mentions(text: str, client) -> str:
     """Replace Slack user mentions (<@USER_ID>) with their email addresses.
 

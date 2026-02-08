@@ -18,6 +18,7 @@ from utils.slack_utils import (
     build_oauth_prompt_blocks,
     build_reschedule_suggestion_blocks,
     build_schedule_suggestion_blocks,
+    post_attendee_mentions,
     resolve_user_mentions,
 )
 
@@ -77,6 +78,7 @@ def register_message_handlers(app: App) -> None:
                 response=response,
                 tools=tools,
                 say=say,
+                client=client,
             )
 
             if oauth_sent:
@@ -107,6 +109,7 @@ def _handle_tool_use_loop(
     response: dict,
     tools: list[dict],
     say,
+    client=None,
     max_iterations: int = 5,
 ) -> tuple[dict, bool]:
     """Execute tool use loop until model stops requesting tools.
@@ -120,6 +123,7 @@ def _handle_tool_use_loop(
         response: Initial Bedrock response.
         tools: Tool definitions.
         say: Slack say function.
+        client: Slack WebClient instance for resolving email to mentions.
         max_iterations: Max tool use iterations to prevent infinite loops.
 
     Returns:
@@ -182,6 +186,12 @@ def _handle_tool_use_loop(
                              f"<{result_data.get('html_link', '')}|Google Calendarで確認>",
                         thread_ts=thread_ts,
                     )
+                    if client:
+                        post_attendee_mentions(
+                            client, channel_id, thread_ts,
+                            result_data.get("summary", ""),
+                            result_data.get("attendees", []),
+                        )
                     return response, True
 
                 if result_data.get("status") == "suggest_reschedule":
@@ -264,6 +274,7 @@ def process_request(user_id: str, text: str, thread_ts: str, channel_id: str, cl
             response=response,
             tools=tools,
             say=lambda **kwargs: client.chat_postMessage(channel=channel_id, **kwargs),
+            client=client,
         )
 
         if oauth_sent:

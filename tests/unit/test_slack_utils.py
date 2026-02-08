@@ -14,6 +14,7 @@ from utils.slack_utils import (
     build_slot_confirmation_modal,
     email_to_slack_user_id,
     format_attendees_with_mentions,
+    post_attendee_mentions,
     resolve_user_mentions,
 )
 
@@ -249,56 +250,46 @@ class TestBuildEventCreatedBlocks:
         assert len(blocks) == 2
 
 
-class TestBuildEventCreatedBlocksWithMentions:
-    def test_with_client_resolves_mentions(self):
+class TestPostAttendeeMentions:
+    def test_posts_mention_message(self):
         client = MagicMock()
         client.users_lookupByEmail.side_effect = [
             {"user": {"id": "U111"}},
             {"user": {"id": "U222"}},
         ]
-        event_data = {
-            "summary": "テストMTG",
-            "start": "2024-01-15T14:00:00+09:00",
-            "end": "2024-01-15T14:30:00+09:00",
-            "attendees": ["a@test.com", "b@test.com"],
-            "html_link": "https://calendar.google.com/event/123",
-        }
-        blocks = build_event_created_blocks(event_data, client)
+        post_attendee_mentions(client, "C123", "1234.5678", "テストMTG", ["a@test.com", "b@test.com"])
 
-        section_text = blocks[1]["text"]["text"]
-        assert "<@U111>" in section_text
-        assert "<@U222>" in section_text
+        client.chat_postMessage.assert_called_once()
+        call_kwargs = client.chat_postMessage.call_args[1]
+        assert call_kwargs["channel"] == "C123"
+        assert call_kwargs["thread_ts"] == "1234.5678"
+        assert "<@U111>" in call_kwargs["text"]
+        assert "<@U222>" in call_kwargs["text"]
+        assert "テストMTG" in call_kwargs["text"]
 
-    def test_without_client_shows_emails(self):
-        event_data = {
-            "summary": "テストMTG",
-            "start": "2024-01-15T14:00:00+09:00",
-            "end": "2024-01-15T14:30:00+09:00",
-            "attendees": ["a@test.com", "b@test.com"],
-        }
-        blocks = build_event_created_blocks(event_data)
+    def test_empty_attendees_does_not_post(self):
+        client = MagicMock()
+        post_attendee_mentions(client, "C123", "1234.5678", "MTG", [])
+        client.chat_postMessage.assert_not_called()
 
-        section_text = blocks[1]["text"]["text"]
-        assert "a@test.com" in section_text
-        assert "b@test.com" in section_text
-
-    def test_partial_resolution_fallback(self):
+    def test_partial_resolution_includes_email_fallback(self):
         client = MagicMock()
         client.users_lookupByEmail.side_effect = [
             {"user": {"id": "U111"}},
             Exception("User not found"),
         ]
-        event_data = {
-            "summary": "テストMTG",
-            "start": "2024-01-15T14:00:00+09:00",
-            "end": "2024-01-15T14:30:00+09:00",
-            "attendees": ["a@test.com", "external@other.com"],
-        }
-        blocks = build_event_created_blocks(event_data, client)
+        post_attendee_mentions(client, "C123", "1234.5678", "MTG", ["a@test.com", "ext@other.com"])
 
-        section_text = blocks[1]["text"]["text"]
-        assert "<@U111>" in section_text
-        assert "external@other.com" in section_text
+        call_kwargs = client.chat_postMessage.call_args[1]
+        assert "<@U111>" in call_kwargs["text"]
+        assert "ext@other.com" in call_kwargs["text"]
+
+    def test_api_error_does_not_raise(self):
+        client = MagicMock()
+        client.users_lookupByEmail.return_value = {"user": {"id": "U111"}}
+        client.chat_postMessage.side_effect = Exception("Slack API error")
+        # Should not raise
+        post_attendee_mentions(client, "C123", "1234.5678", "MTG", ["a@test.com"])
 
 
 class TestEmailToSlackUserId:

@@ -18,7 +18,7 @@ from utils.slack_utils import (
     build_oauth_prompt_blocks,
     build_reschedule_suggestion_blocks,
     build_schedule_suggestion_blocks,
-    format_attendees_with_mentions,
+    post_attendee_mentions,
     resolve_user_mentions,
 )
 
@@ -180,19 +180,18 @@ def _handle_tool_use_loop(
                     return response, True
 
                 if result_data.get("status") == "rescheduled":
-                    attendees = result_data.get("attendees", [])
-                    if client and attendees:
-                        attendee_str = format_attendees_with_mentions(attendees, client)
-                        mention_line = f"👥 {attendee_str}\n"
-                    else:
-                        mention_line = ""
                     say(
                         text=f"✅ 「{result_data.get('summary', '')}」をリスケジュールしました。\n"
                              f"📅 新しい時間: {result_data.get('start', '')} - {result_data.get('end', '')}\n"
-                             f"{mention_line}"
                              f"<{result_data.get('html_link', '')}|Google Calendarで確認>",
                         thread_ts=thread_ts,
                     )
+                    if client:
+                        post_attendee_mentions(
+                            client, channel_id, thread_ts,
+                            result_data.get("summary", ""),
+                            result_data.get("attendees", []),
+                        )
                     return response, True
 
                 if result_data.get("status") == "suggest_reschedule":

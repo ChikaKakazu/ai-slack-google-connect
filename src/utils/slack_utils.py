@@ -273,12 +273,11 @@ def build_reschedule_suggestion_blocks(result_data: dict) -> list[dict]:
     return blocks
 
 
-def build_event_created_blocks(event_data: dict, client=None) -> list[dict]:
+def build_event_created_blocks(event_data: dict) -> list[dict]:
     """Build Block Kit blocks for event creation confirmation.
 
     Args:
         event_data: Event data from calendar API.
-        client: Slack WebClient instance for resolving email to mentions.
 
     Returns:
         List of Slack Block Kit blocks.
@@ -286,12 +285,6 @@ def build_event_created_blocks(event_data: dict, client=None) -> list[dict]:
     start_dt = parse_datetime(event_data["start"])
     end_dt = parse_datetime(event_data["end"])
     time_str = f"{start_dt.strftime('%Y/%m/%d %H:%M')} - {end_dt.strftime('%H:%M')}"
-
-    attendees = event_data.get("attendees", [])
-    if client and attendees:
-        attendee_str = format_attendees_with_mentions(attendees, client)
-    else:
-        attendee_str = ", ".join(attendees)
 
     blocks = [
         {
@@ -308,7 +301,7 @@ def build_event_created_blocks(event_data: dict, client=None) -> list[dict]:
                 "text": (
                     f"*{event_data['summary']}*\n"
                     f"📅 {time_str}\n"
-                    f"👥 {attendee_str}"
+                    f"👥 {', '.join(event_data.get('attendees', []))}"
                 ),
             },
         },
@@ -593,6 +586,38 @@ def format_attendees_with_mentions(attendees: list[str], client) -> str:
         else:
             mentions.append(email)
     return ", ".join(mentions)
+
+
+def post_attendee_mentions(
+    client, channel: str, thread_ts: str, summary: str, attendees: list[str]
+) -> None:
+    """Post a new message mentioning event attendees in a thread.
+
+    Slack does not send notifications for mentions added via chat_update,
+    so this sends a new message to ensure participants are notified.
+
+    Args:
+        client: Slack WebClient instance.
+        channel: Channel ID.
+        thread_ts: Thread timestamp to reply to.
+        summary: Event summary/title.
+        attendees: List of attendee email addresses.
+    """
+    if not attendees:
+        return
+
+    mention_str = format_attendees_with_mentions(attendees, client)
+    if not mention_str:
+        return
+
+    try:
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=f"📢 {summary} に {mention_str} を招待しました",
+        )
+    except Exception:
+        logger.exception("Failed to post attendee mention message")
 
 
 def resolve_user_mentions(text: str, client) -> str:

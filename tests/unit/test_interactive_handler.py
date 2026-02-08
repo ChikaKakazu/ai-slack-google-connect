@@ -254,10 +254,11 @@ class TestHandleConfirmReschedule:
         _handle_confirm_reschedule(ack, body, client, say)
         ack.assert_called_once()
         client.chat_update.assert_called_once()
-        # Verify mention is in the updated message
-        blocks = client.chat_update.call_args[1]["blocks"]
-        section_text = blocks[1]["text"]["text"]
-        assert "<@U999>" in section_text
+        # Verify mention is posted as a new thread message
+        client.chat_postMessage.assert_called_once()
+        mention_kwargs = client.chat_postMessage.call_args[1]
+        assert mention_kwargs["thread_ts"] == "1234.5678"
+        assert "<@U999>" in mention_kwargs["text"]
 
     def test_invalid_action_value(self):
         from handlers.interactive_handler import _handle_confirm_reschedule

@@ -11,7 +11,7 @@ from utils.slack_utils import (
     build_create_confirmation_modal,
     build_event_created_blocks,
     build_slot_confirmation_modal,
-    format_attendees_with_mentions,
+    post_attendee_mentions,
 )
 from utils.time_utils import parse_datetime
 
@@ -126,13 +126,17 @@ def _handle_slot_modal_submit(ack, body, client, view) -> None:
             "html_link": event.get("htmlLink", ""),
         }
 
-        blocks = build_event_created_blocks(event_data, client)
+        blocks = build_event_created_blocks(event_data)
 
         client.chat_update(
             channel=channel_id,
             ts=message_ts,
             blocks=blocks,
             text=f"✅ {summary} を作成しました",
+        )
+
+        post_attendee_mentions(
+            client, channel_id, message_ts, summary, event_data["attendees"]
         )
 
     except Exception:
@@ -187,11 +191,11 @@ def _handle_confirm_reschedule(ack, body, client, say) -> None:
         end_str = parse_datetime(updated["end"]["dateTime"]).strftime("%H:%M")
 
         attendees = [a["email"] for a in updated.get("attendees", [])]
-        attendee_str = format_attendees_with_mentions(attendees, client)
+        reschedule_ts = body["message"]["ts"]
 
         client.chat_update(
             channel=channel,
-            ts=body["message"]["ts"],
+            ts=reschedule_ts,
             blocks=[
                 {
                     "type": "header",
@@ -204,13 +208,16 @@ def _handle_confirm_reschedule(ack, body, client, say) -> None:
                         "text": (
                             f"*{summary}*\n"
                             f"📅 {start_str} - {end_str}\n"
-                            f"👥 {attendee_str}\n"
                             f"<{updated.get('htmlLink', '')}|Google Calendarで確認>"
                         ),
                     },
                 },
             ],
             text=f"✅ {summary} をリスケジュールしました",
+        )
+
+        post_attendee_mentions(
+            client, channel, reschedule_ts, summary, attendees
         )
 
     except Exception:
@@ -305,13 +312,17 @@ def _handle_create_modal_submit(ack, body, client, view) -> None:
             "html_link": event.get("htmlLink", ""),
         }
 
-        blocks = build_event_created_blocks(event_data, client)
+        blocks = build_event_created_blocks(event_data)
 
         client.chat_update(
             channel=channel_id,
             ts=message_ts,
             blocks=blocks,
             text=f"✅ {summary} を作成しました",
+        )
+
+        post_attendee_mentions(
+            client, channel_id, message_ts, summary, event_data["attendees"]
         )
 
     except Exception:
